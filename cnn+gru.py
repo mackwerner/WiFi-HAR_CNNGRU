@@ -1,13 +1,50 @@
+import numpy as np
 import torch
+from torch.utils.data import TensorDataset, DataLoader
 import torch.nn as nn
 import torch.nn.functional as F
 
-# CNN + GRU model for UT-HAR
+# =================================
+# Load UT-HAR data from folder
+# =================================
+
+ROOT = "/Users/mack/Desktop/Computer Vision/CV Final Project/UT-HAR Dataset" # Change to your folder
+
+X_train = np.load(f"{ROOT}/data/X_train.csv", allow_pickle=True)
+y_train = np.load(f"{ROOT}/label/y_train.csv", allow_pickle=True)
+
+X_val   = np.load(f"{ROOT}/data/X_val.csv", allow_pickle=True)
+y_val   = np.load(f"{ROOT}/label/y_val.csv", allow_pickle=True)
+
+# Convert to tensors
+X_train = torch.tensor(X_train, dtype=torch.float32)
+y_train = torch.tensor(y_train, dtype=torch.long).squeeze()
+
+X_val   = torch.tensor(X_val, dtype=torch.float32)
+y_val   = torch.tensor(y_val, dtype=torch.long).squeeze()
+
+print("X_train:", X_train.shape)
+print("X_val:",   X_val.shape)
+print("y_train:", y_train.shape)
+print("y_val:",   y_val.shape)
+
+# Create datasets & loaders
+train_ds = TensorDataset(X_train, y_train)
+val_ds   = TensorDataset(X_val,   y_val)
+
+train_dl = DataLoader(train_ds, batch_size=64, shuffle=True)
+val_dl   = DataLoader(val_ds,   batch_size=64, shuffle=False)
+
+# =================================
+# CNN+GRU model for UT-HAR
+#    (expects input as (B, T, F) = (batch, time, features)
+# =================================
+
 class CNNGRU(nn.Module):
     def __init__(
         self,
-        in_channels,
-        num_classes=6,
+        in_channels,        # this will be feature_dim = 90
+        num_classes=7,      # There are 7 classes, not 6 (0-6)
         cnn_channels=64,
         gru_hidden=128,
         gru_layers=1,
@@ -16,7 +53,7 @@ class CNNGRU(nn.Module):
     ):
         super(CNNGRU, self).__init__()
 
-        # 1D CNN over time
+        # 1D CNN over time (we'll transpose to (B, C, T) inside forward)
         self.cnn = nn.Sequential(
             nn.Conv1d(in_channels, cnn_channels, kernel_size=3, padding=1),
             nn.BatchNorm1d(cnn_channels),
@@ -46,7 +83,10 @@ class CNNGRU(nn.Module):
         self.fc = nn.Linear(fc_in, num_classes)
 
     def forward(self, x):
-        # x: (B, C, T)
+        # x: (B, T, F) = (batch, time, features)
+        # transpose to (B, C, T) for Conv1d, where C = features
+        x = x.permute(0, 2, 1)   # (B, F, T)
+
         x = self.cnn(x)          # (B, C', T')
         x = x.permute(0, 2, 1)   # (B, T', C')
 
@@ -61,9 +101,9 @@ class CNNGRU(nn.Module):
         return logits
 
 
-# ============================
-# Training / eval functions
-# ============================
+# =================================
+# Training / Evaluation Utilities
+# =================================
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using device:", DEVICE)
@@ -75,11 +115,11 @@ def train_epoch(model, loader, optimizer, criterion):
     total = 0
 
     for x, y in loader:
-        x = x.to(DEVICE)
+        x = x.to(DEVICE)  # shape (B, T, F)
         y = y.to(DEVICE)
 
         optimizer.zero_grad()
-        outputs = model(x)
+        outputs = model(x)          # (B, num_classes)
         loss = criterion(outputs, y)
         loss.backward()
         optimizer.step()
@@ -118,20 +158,15 @@ def eval_epoch(model, loader, criterion):
     return avg_loss, acc
 
 
-# ============================
-# Main training script
-# ============================
+# =================================
+# Model & train
+# =================================
 
-# make_uthar_loaders should already be defined somewhere else
-root = "/path/uthar_dataset"
-train_loader, val_loader, test_loader = make_uthar_loaders(root, batch_size=64)
+# figure out input feature size from X_train: (N, T, F)
+_, T, F = X_train.shape
+print("Sequence length:", T, "Feature dim:", F)
 
-# figure out input channels from one batch
-x_batch, _ = next(iter(train_loader))
-_, C_in, _ = x_batch.shape
-print("Example batch shape:", x_batch.shape)
-
-model = CNNGRU(in_channels=C_in, num_classes=6).to(DEVICE)
+model = CNNGRU(in_channels=F, num_classes=7).to(DEVICE)
 print(model)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -140,8 +175,8 @@ criterion = nn.CrossEntropyLoss()
 num_epochs = 20
 
 for epoch in range(1, num_epochs + 1):
-    train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion)
-    val_loss, val_acc = eval_epoch(model, val_loader, criterion)
+    train_loss, train_acc = train_epoch(model, train_dl, optimizer, criterion)
+    val_loss, val_acc     = eval_epoch(model, val_dl, criterion)
 
     print(
         f"Epoch {epoch:02d}: "
