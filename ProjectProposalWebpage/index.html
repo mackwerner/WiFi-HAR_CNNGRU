@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en"><head>  
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <title>Computer Vision Course Project
+  | ECE, Virginia Tech | Fall 2021: ECE 4554/5554</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+<!-- Le styles -->  
+  <link href="css/bootstrap.css" rel="stylesheet">
+<style>
+body {
+padding-top: 60px; /* 60px to make the container go all the way to the bottom of the topbar */
+}
+.vis {
+color: #3366CC;
+}
+.data {
+color: #FF9900;
+}
+</style>
+  
+<link href="css/bootstrap-responsive.min.css" rel="stylesheet">
+
+<!-- HTML5 shim, for IE6-8 support of HTML5 elements --><!--[if lt IE 9]>
+<script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+</head>
+
+<body>
+<div class="container">
+<div class="page-header">
+
+<!-- Title and Name --> 
+<h1>Exploring Human Activity Recogntion Using WiFi CSI Data</h1> 
+<span style="font-size: 20px; line-height: 1.5em;"><strong>Mack Werner, Ryan Frost, and Jacqueline Newland </strong></span><br>
+<span style="font-size: 18px; line-height: 1.5em;">Fall 2025 ECE 4554/5554 Computer Vision: Course Project</span><br>
+<span style="font-size: 18px; line-height: 1.5em;">Virginia Tech</span>
+<hr>
+
+<!-- Goal -->
+<h3>Problem Statement</h3>
+
+The goal of this project is to explore the intersection of computer vision and RF sensing by exploiting properties of the wireless channel to gather information about human activity. Specifically, we aim to use WiFi Channel State Information (CSI) with vision-orineted deep learning techniques to perform Human Activity Recognition (HAR). 
+<br><br>
+<!-- figure -->
+<h3>Core Concept Visual</h3>
+<br><br>
+<!-- Main Illustrative Figure --> 
+<div style="display: flex; width: 100%;">
+  <div style="flex: 1; padding: 20px; box-sizing: border-box; overflow: auto; text-align: center;">
+    <img style="height: 600px;" alt="" src="CSI_WIFI_Diagram.png">
+    Figure 1. WiFi-based Human Activity Recognition Pipeline [1]
+  </div>
+  <div style="flex: 1; padding: 20px; box-sizing: border-box; overflow: auto;">
+    <h3>Technical Approach</h3>
+    Our approach will build on recent research in CSI-based HAR. As a baseline, we will reproduce the results from Wakili et al [1], which uses a CNN + GRU pipeline. Extending beyond that baseline we will test on the OperaNET CSI dataset and compare our classification performance with another group's training on passive WiFi radar datasets. Using PyTorch, TensorFlow, and OpenCV we will implement the model and preprocessing. To gauge the effectiveness of our approach, we will evaluate accuracy, confusion matrices, F1 scores, and qualitative comparisons of activity categories. 
+
+    <h3>Datasets</h3>
+    
+    <li>UT-HAR Dataset: Benchmark CSI dataset widely used for HAR. [1]</li>
+    <img style="height: 300px;" alt="" src="UT-HAR_Diagram.png"> 
+    <li>OperaNET CSI Dataset: Dataset of WiFi CSI from an operational network, allowing us to test on real-world, noisy conditions. [2]</li>
+    <img style="height: 100px;" alt="" src="OperaNetDataset.png"> 
+  </div>
+</div>
+<!-- Introduction -->
+<h3>Experimental Setup</h3>
+Our experiment setup begins with data preprocessing, where we will extract and normalize the amplitude and phase of CSI signals to prepare them for learning. Once the data is processed, we will proceed to model training, using CNN layers to capture spatial features in the CSI patterns, followed by GRU layers to model the temporal dependencies inherent in human activity sequences. With this model, we will first focus on baseline replication, training and validating on the UT-HAR dataset to reproduce the results reported in the 2025 paper. After establishing this baseline, we will move to cross-dataset validation, applying our trained model to the OperaNET dataset to test how well the learned representations generalize across different CSI data sources. 
+<div style="text-align: center;">
+<img style="height: 500px;" alt="" src="Model_Diagram.png">
+<div>
+Figure 2. CNN+GRUP Model Architecture [1]
+</div>
+</div>
+<br><br>
+<!-- Approach -->
+<h3>Implementation</h3>
+The implementation will be a combination of original coding and borrowed tools. We plan to develop our own preprocessing pipeline, CNN + GRU training scripts, and evaluation metrics. At the same time, we will leverage open-source implementations in PyTorch and Tensor Flow to adapt baseline architectures for CSI classification, allowing us to benchmark our system efficiently.
+
+<br><br>
+<!-- Results -->
+<h3>Success Criteria</h3>
+We will define success as the ability to replicate the published accuracy on UT-HAR, showing that our reproduction is faithful to the original study. Beyond that, success will also require demonstrating robust cross-dataset performance on OperaNET, as this will indicate the model’s capacity to generalize beyond a single experimental setup. Finally, we expect our experiments to yield insights into the transferability of CSI-based models across environments, which will help assess the broader potential of WiFi CSI in HAR. 
+
+<br><br>
+
+<!-- References -->
+<h3>References</h3>
+[1] A. A. Wakili, B. J. Asaju, and W. Jung, "Evaluating BiLSTM and CNN+GRU Approaches for Human Activity Recognition Using WiFi CSI Data," in Proc. 23rd IEEE/ACIS Int. Conf. Softw. Eng., Manage. Appl. (SERA), 2025, arXiv:2506.11165. 
+<br>
+[2] Bocus, M.J., Li, W., Vishwakarma, S. et al. OPERAnet, a multimodal activity recognition dataset acquired from radio frequency and vision-based sensors. Sci Data 9, 474 (2022). https://doi.org/10.1038/s41597-022-01573-2
+<br><br>
+
+
+  <hr>
+  <footer> 
+  <p>© Mack Werner, Ryan Frost, and Jacqueline Newland</p>
+  </footer>
+</div>
+</div>
+
+<br><br>
+
+</body></html>
