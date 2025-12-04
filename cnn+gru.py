@@ -4,11 +4,43 @@ from torch.utils.data import TensorDataset, DataLoader
 import torch.nn as nn
 import torch.nn.functional as F
 
-# =================================
-# Load UT-HAR data from folder
-# =================================
+from sklearn.metrics import (
+    accuracy_score,
+    precision_recall_fscore_support,
+    classification_report,
+    confusion_matrix,
+)
+import matplotlib.pyplot as plt
 
-ROOT = "/Users/mack/Desktop/Computer Vision/CV Final Project/UT-HAR Dataset" # Change to your folder
+# If you're in a notebook:
+# %matplotlib inline
+
+# ====================================================
+# Config
+# ====================================================
+
+ROOT = "/Users/mack/Desktop/Computer Vision/CV Final Project/UT-HAR Dataset"
+BATCH_SIZE = 64
+NUM_CLASSES = 7
+NUM_EPOCHS = 100
+LR = 1e-3
+
+CLASS_NAMES = [
+    "Lie Down",   # 0
+    "Fall",       # 1
+    "Walk",       # 2
+    "Pick Up",    # 3
+    "Run",        # 4
+    "Sit Down",   # 5
+    "Stand Up",   # 6
+]
+
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+print("Using device:", DEVICE)
+
+# ====================================================
+# Load UT-HAR data from folder
+# ====================================================
 
 X_train = np.load(f"{ROOT}/data/X_train.csv", allow_pickle=True)
 y_train = np.load(f"{ROOT}/label/y_train.csv", allow_pickle=True)
@@ -24,27 +56,27 @@ X_val   = torch.tensor(X_val, dtype=torch.float32)
 y_val   = torch.tensor(y_val, dtype=torch.long).squeeze()
 
 print("X_train:", X_train.shape)
-print("X_val:",   X_val.shape)
+print("X_val:  ", X_val.shape)
 print("y_train:", y_train.shape)
-print("y_val:",   y_val.shape)
+print("y_val:  ", y_val.shape)
 
 # Create datasets & loaders
 train_ds = TensorDataset(X_train, y_train)
 val_ds   = TensorDataset(X_val,   y_val)
 
-train_dl = DataLoader(train_ds, batch_size=64, shuffle=True)
-val_dl   = DataLoader(val_ds,   batch_size=64, shuffle=False)
+train_dl = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+val_dl   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False)
 
-# =================================
+# ====================================================
 # CNN+GRU model for UT-HAR
 #    (expects input as (B, T, F) = (batch, time, features)
-# =================================
+# ====================================================
 
 class CNNGRU(nn.Module):
     def __init__(
         self,
-        in_channels,        # this will be feature_dim = 90
-        num_classes=7,      # There are 7 classes, not 6 (0-6)
+        in_channels,        # feature_dim = 90
+        num_classes=NUM_CLASSES,
         cnn_channels=64,
         gru_hidden=128,
         gru_layers=1,
@@ -100,13 +132,9 @@ class CNNGRU(nn.Module):
         logits = self.fc(last)   # (B, num_classes)
         return logits
 
-
-# =================================
+# ====================================================
 # Training / Evaluation Utilities
-# =================================
-
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-print("Using device:", DEVICE)
+# ====================================================
 
 def train_epoch(model, loader, optimizer, criterion):
     model.train()
@@ -157,29 +185,146 @@ def eval_epoch(model, loader, criterion):
     acc = correct / total
     return avg_loss, acc
 
-
-# =================================
+# ====================================================
 # Model & train
-# =================================
+# ====================================================
 
 # figure out input feature size from X_train: (N, T, F)
 _, T, F = X_train.shape
 print("Sequence length:", T, "Feature dim:", F)
 
-model = CNNGRU(in_channels=F, num_classes=7).to(DEVICE)
+model = CNNGRU(in_channels=F, num_classes=NUM_CLASSES).to(DEVICE)
 print(model)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 criterion = nn.CrossEntropyLoss()
 
-num_epochs = 20
+train_losses, val_losses = [], []
+train_accs,  val_accs  = [], []
 
-for epoch in range(1, num_epochs + 1):
+for epoch in range(1, NUM_EPOCHS + 1):
     train_loss, train_acc = train_epoch(model, train_dl, optimizer, criterion)
     val_loss, val_acc     = eval_epoch(model, val_dl, criterion)
+
+    train_losses.append(train_loss)
+    val_losses.append(val_loss)
+    train_accs.append(train_acc)
+    val_accs.append(val_acc)
 
     print(
         f"Epoch {epoch:02d}: "
         f"train_loss={train_loss:.4f}, train_acc={train_acc:.4f}, "
         f"val_loss={val_loss:.4f}, val_acc={val_acc:.4f}"
     )
+
+# ====================================================
+# Post-training evaluation on validation set
+# ====================================================
+
+model.eval()
+all_preds = []
+all_labels = []
+
+with torch.no_grad():
+    for x, y in val_dl:
+        x = x.to(DEVICE)
+        y = y.to(DEVICE)
+
+        outputs = model(x)                  # (B, num_classes)
+        preds = outputs.argmax(dim=1)       # (B,)
+
+        all_preds.append(preds.cpu().numpy())
+        all_labels.append(y.cpu().numpy())
+
+all_preds  = np.concatenate(all_preds)
+all_labels = np.concatenate(all_labels)
+
+# ---------- Overall metrics ----------
+acc = accuracy_score(all_labels, all_preds)
+precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(
+    all_labels, all_preds, average="macro", zero_division=0
+)
+precision_weighted, recall_weighted, f1_weighted, _ = precision_recall_fscore_support(
+    all_labels, all_preds, average="weighted", zero_division=0
+)
+
+print("\n===== Overall Validation Metrics =====")
+print(f"Accuracy:           {acc:.4f}")
+print(f"Macro Precision:    {precision_macro:.4f}")
+print(f"Macro Recall:       {recall_macro:.4f}")
+print(f"Macro F1-Score:     {f1_macro:.4f}")
+print(f"Weighted Precision: {precision_weighted:.4f}")
+print(f"Weighted Recall:    {recall_weighted:.4f}")
+print(f"Weighted F1-Score:  {f1_weighted:.4f}")
+
+# ---------- Class-wise metrics ----------
+print("\n===== Class-wise Metrics (Validation) =====")
+report = classification_report(
+    all_labels, all_preds, target_names=CLASS_NAMES, digits=4, zero_division=0
+)
+print(report)
+
+# Raw arrays if you want them programmatically
+prec_cls, rec_cls, f1_cls, support_cls = precision_recall_fscore_support(
+    all_labels, all_preds, average=None, zero_division=0
+)
+for i, name in enumerate(CLASS_NAMES):
+    print(
+        f"{name}: precision={prec_cls[i]:.4f}, "
+        f"recall={rec_cls[i]:.4f}, f1={f1_cls[i]:.4f}, support={support_cls[i]}"
+    )
+
+# ---------- Confusion matrix & heatmap ----------
+cm = confusion_matrix(all_labels, all_preds)
+
+# Normalize rows to sum to 1
+cm_norm = cm.astype('float') / cm.sum(axis=1, keepdims=True)
+
+plt.figure(figsize=(6, 5))
+plt.imshow(cm_norm, interpolation="nearest", cmap="Blues_r", vmin=0, vmax=1)
+plt.title("Confusion Matrix")
+plt.colorbar()
+tick_marks = np.arange(len(CLASS_NAMES))
+plt.xticks(tick_marks, CLASS_NAMES, rotation=45)
+plt.yticks(tick_marks, CLASS_NAMES)
+
+fmt = ".2f"
+thresh = cm_norm.max() / 2.
+for i in range(cm_norm.shape[0]):
+    for j in range(cm_norm.shape[1]):
+        plt.text(j, i, format(cm_norm[i, j], fmt),
+                 ha="center", va="center",
+                 color="white" if cm_norm[i, j] < thresh else "black")
+
+plt.ylabel("Actual label")
+plt.xlabel("Predicted label")
+plt.tight_layout()
+plt.show()
+
+# ====================================================
+# Training curves
+# ====================================================
+
+epochs = range(1, NUM_EPOCHS + 1)
+
+plt.figure()
+plt.plot(epochs, train_losses, label="Train Loss")
+plt.plot(epochs, val_losses,   label="Val Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.title("Training vs Validation Loss")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+plt.figure()
+plt.plot(epochs, train_accs, label="Train Acc")
+plt.plot(epochs, val_accs,   label="Val Acc")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+plt.title("Training vs Validation Accuracy")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
